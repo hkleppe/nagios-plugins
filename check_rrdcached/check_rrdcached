@@ -73,10 +73,33 @@ close($sock);
 
 foreach my $line ( split( "\n", $response ) ) {
     my ( $key, $value ) = split( /:\s*/, $line, 2 );
-    if ($key =~ /(Received|Written)$/) {
-	    $np->add_perfdata( label => $key, value => "${value}c" );
+    if ( $key =~ /(UpdatesReceived)$/ ) {
+        $np->add_perfdata( label => $key, value => "${value}c" );
+        
+        # tmp file for storing UpdatesReceived between runs
+        my $tmp_filename = "/tmp/check_rrdcached_last_value.tmp";
+
+        # fetching previous value
+        open my $tmp_file, '<', $tmp_filename;
+        my $line = <$tmp_file> || "0";
+        close $tmp_file;
+
+        my $last_value = int($line);
+
+        # red alert?
+        if ( $last_value == ${value} ) {
+            $np->nagios_exit( CRITICAL, "rrdcached has not received any updates since last check");
+        }
+        
+        # write stuff back for next time
+        open my $out_file, '>', $tmp_filename;
+        print $out_file ${value};
+        close $out_file;
+
+    } elsif ($key =~ /(Received|Written)$/) {
+        $np->add_perfdata( label => $key, value => "${value}c" );
     } else {
-	    $np->add_perfdata( label => $key, value => "${value}" );
+        $np->add_perfdata( label => $key, value => "${value}" );
     }
 }
 
