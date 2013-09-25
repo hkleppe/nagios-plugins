@@ -34,6 +34,11 @@ $np->add_arg(
     help =>
         '-s, --socketpath=FILENAME . Filename for the rrdached socket. Defaults to "/var/run/rrdcached.sock".'
 );
+$np->add_arg(
+    spec => 'checkupdates|c=s',
+    help =>
+        '--checkupdates . Check if rrdcached got any updates since last check and turn critical if it did not.'
+);
 
 $np->getopts;
 
@@ -41,6 +46,8 @@ $np->getopts;
 alarm $np->opts->timeout;
 
 my $sock_path = $np->opts->socketpath || '/var/run/rrdcached.sock';
+my $statefile_path = $np->opts->checkupdates || "/var/cache/check_rrdcached_last_value.tmp";
+my $do_update_check = $np->opts->checkupdates || 0;
 
 my $sock = IO::Socket::UNIX->new($sock_path);
 
@@ -71,30 +78,32 @@ $np->nagios_exit( CRITICAL, "No response from rrdcached" ) unless $response;
 print $sock "QUIT\n";
 close($sock);
 
+
+
 foreach my $line ( split( "\n", $response ) ) {
     my ( $key, $value ) = split( /:\s*/, $line, 2 );
     if ( $key =~ /(UpdatesReceived)$/ ) {
         $np->add_perfdata( label => $key, value => "${value}c" );
         
-        # tmp file for storing UpdatesReceived between runs
-        my $tmp_filename = "/tmp/check_rrdcached_last_value.tmp";
+        if ($do_update_check) {
 
-        # fetching previous value
-        open my $tmp_file, '<', $tmp_filename;
-        my $line = <$tmp_file> || "0";
-        close $tmp_file;
+            # fetching previous value
+            open my $tmp_file, '<', $statefile_path;
+            my $line = <$tmp_file> || "0";
+            close $tmp_file;
 
-        my $last_value = int($line);
+            my $last_value = int($line);
 
-        # red alert?
-        if ( $last_value == ${value} ) {
-            $np->nagios_exit( CRITICAL, "rrdcached has not received any updates since last check");
+            # red alert?
+            if ( $last_value == ${value} ) {
+                $np->nagios_exit( CRITICAL, "rrdcached has not received any updates since last check");
+            }
+            
+            # write stuff back for next time
+            open my $out_file, '>', $statefile_path;
+            print $out_file ${value};
+            close $out_file;
         }
-        
-        # write stuff back for next time
-        open my $out_file, '>', $tmp_filename;
-        print $out_file ${value};
-        close $out_file;
 
     } elsif ($key =~ /(Received|Written)$/) {
         $np->add_perfdata( label => $key, value => "${value}c" );
