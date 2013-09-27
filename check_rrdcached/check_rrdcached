@@ -36,8 +36,13 @@ $np->add_arg(
 );
 $np->add_arg(
     spec => 'checkupdates|c=s',
-    help =>
-        '--checkupdates . Check if rrdcached got any updates since last check and turn critical if it did not.'
+    help => 
+        '--checkupdates . Check if rrcached got any updates since last check. Critical if not'
+);
+$np->add_arg(
+    spec     => 'statefile=s',
+    help     =>
+        '--statefile . Where the state for keeping track of updates are stored'
 );
 
 $np->getopts;
@@ -46,8 +51,8 @@ $np->getopts;
 alarm $np->opts->timeout;
 
 my $sock_path = $np->opts->socketpath || '/var/run/rrdcached.sock';
-my $statefile_path = $np->opts->checkupdates || "/var/cache/check_rrdcached_last_value.tmp";
 my $do_update_check = $np->opts->checkupdates || 0;
+my $statefile_path = $np->opts->statefile || "/var/cache/check_rrdcached_last_value.tmp";
 
 my $sock = IO::Socket::UNIX->new($sock_path);
 
